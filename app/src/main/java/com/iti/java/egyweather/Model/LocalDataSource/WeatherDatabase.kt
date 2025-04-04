@@ -6,11 +6,12 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.iti.java.egyweather.Model.BOJO.FavoriteLocation
 import com.iti.java.egyweather.Model.BOJO.ForecastResponse
 import com.iti.java.egyweather.Model.BOJO.WeatherResponse
 
 @Database(
-    entities = [WeatherResponse::class, ForecastResponse::class],
+    entities = [WeatherResponse::class, ForecastResponse::class, FavoriteLocation::class],
     version = 1,
     exportSchema = false
 )

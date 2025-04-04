@@ -95,6 +95,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import com.iti.java.egyweather.Screen
 
 class MainActivity : ComponentActivity() {
     private val viewModel: WeatherViewModel by viewModels {
@@ -114,6 +115,7 @@ class MainActivity : ComponentActivity() {
             this
         )
     }
+
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -702,6 +704,7 @@ fun NavigationHost(
     weatherViewModel: WeatherViewModel,
     padding: PaddingValues
 ) {
+
     val activity = LocalActivity.current as MainActivity
     NavHost(
         navController = navController,
@@ -712,13 +715,22 @@ fun NavigationHost(
             WeatherScreen(viewModel = weatherViewModel)
         }
         composable(Screen.Favorites.route) {
-            FavoritesScreen(viewModel = FavoritesViewModel(activity.repository))
+            FavoritesScreen(navController = navController)
         }
         composable(Screen.Alerts.route) {
             AlertsScreen(viewModel = AlertsViewModel(activity.repository))
         }
         composable(Screen.Settings.route) {
             SettingsScreen(viewModel = SettingsViewModel(SettingsRepository()))
+        }
+        composable(Screen.Forecast.route) { backStackEntry ->
+            val lat = backStackEntry.arguments?.getString("lat")?.toDoubleOrNull() ?: 0.0
+            val lon = backStackEntry.arguments?.getString("lon")?.toDoubleOrNull() ?: 0.0
+            ForecastScreen(
+                lat = lat,
+                lon = lon,
+                viewModel = weatherViewModel
+            )
         }
     }
 }

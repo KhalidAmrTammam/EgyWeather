@@ -23,8 +23,9 @@ fun AlertsScreen(viewModel: AlertsViewModel) {
     }
 }
 @Composable
-fun AlertItem(alert: String) { // Keep as String if alerts are strings
+fun AlertItem(alert: String) {
     Card(modifier = Modifier.padding(8.dp)) {
         Text(text = alert, modifier = Modifier.padding(16.dp))
     }
+
 }

@@ -3,6 +3,7 @@ package com.iti.java.egyweather.Model
 import android.content.Context
 import android.util.Log
 import androidx.room.Transaction
+import com.iti.java.egyweather.Model.BOJO.FavoriteLocation
 import com.iti.java.egyweather.Model.BOJO.ForecastResponse
 import com.iti.java.egyweather.Model.BOJO.WeatherResponse
 import com.iti.java.egyweather.Model.LocalDataSource.WeatherDao
@@ -118,10 +119,20 @@ class WeatherRepository(
     fun getAlerts(): Flow<List<String>> = flow {
         emit(emptyList())
     }
-
-    fun getFavorites(): Flow<List<String>> = flow {
-        emit(emptyList())
+    suspend fun addFavorite(favorite: FavoriteLocation) {
+        weatherDao.insertFavorite(favorite)
     }
+
+    suspend fun removeFavorite(id: Long) {
+        weatherDao.deleteFavorite(id)
+    }
+
+    fun getFavorites(): Flow<List<FavoriteLocation>> {
+        return weatherDao.getFavorites()
+    }
+
+
+
 
 }
 
