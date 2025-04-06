@@ -21,7 +21,8 @@ import java.util.concurrent.TimeUnit
 
 class WeatherViewModel(
     private val repository: WeatherRepository,
-    private val workManager: WorkManager
+    private val workManager: WorkManager,
+    private val settingsViewModel: SettingsViewModel
 ) : ViewModel() {
     private val _state = MutableStateFlow(WeatherState())
     val state: StateFlow<WeatherState> = _state
@@ -34,17 +35,26 @@ class WeatherViewModel(
 
             try {
                 repository.getWeather(lat, lon, API_KEY, forceRefresh)
-                    .combine(repository.getForecast(lat, lon, API_KEY, forceRefresh)) { weather, forecast ->
+                    .combine(
+                        repository.getForecast(
+                            lat,
+                            lon,
+                            API_KEY,
+                            forceRefresh
+                        )
+                    ) { weather, forecast ->
+                        val settingsState = settingsViewModel.uiState.value
                         _state.update {
                             it.copy(
-                                weatherData = weather,
-                                forecastData = forecast,
+                                weatherData = applyUnitConversions(weather, settingsState),
+                                forecastData = forecast?.let { applyForecastUnits(it, settingsState) },
                                 isLoading = false,
                             )
                         }
                     }.collect {}
             } catch (e: Exception) {
-                val hasCachedData = state.value.weatherData != null || state.value.forecastData != null
+                val hasCachedData =
+                    state.value.weatherData != null || state.value.forecastData != null
                 val errorMessage = when (e) {
                     is IOException -> "Network error. ${if (!hasCachedData) "No cached data available." else "Showing cached data."}"
                     is HttpException -> "Server error: ${e.code()}"
@@ -61,6 +71,41 @@ class WeatherViewModel(
         }
     }
 
+    private fun applyUnitConversions(
+        weather: WeatherResponse,
+        settings: SettingsState
+    ): WeatherResponse {
+        return weather.copy(
+            main = weather.main.copy(
+                temp = convertTemperature(weather.main.temp, settings),
+                tempMin = convertTemperature(weather.main.tempMin, settings),
+                tempMax = convertTemperature(weather.main.tempMax, settings)
+            ),
+            wind = weather.wind.copy(
+                speed = convertWindSpeed(weather.wind.speed, settings)
+            )
+        )
+    }
+
+    private fun applyForecastUnits(
+        forecast: ForecastResponse,
+        settings: SettingsState
+    ): ForecastResponse {
+        return forecast.copy(
+            list = forecast.list.map { item ->
+                item.copy(
+                    main = item.main.copy(
+                        temp = convertTemperature(item.main.temp, settings),
+                        tempMin = convertTemperature(item.main.tempMin, settings),
+                        tempMax = convertTemperature(item.main.tempMax, settings)
+                    ),
+                    wind = item.wind.copy(
+                        speed = convertWindSpeed(item.wind.speed, settings)
+                    )
+                )
+            }
+        )
+    }
 
     fun selectHourlyItem(item: ForecastItem) {
         _state.update {
@@ -85,6 +130,7 @@ class WeatherViewModel(
             it.copy(selectedItems = it.selectedItems.copy(dailyDetail = null))
         }
     }
+
     fun scheduleWeatherSync(lat: String, lon: String) {
         val workRequest = PeriodicWorkRequestBuilder<WeatherSyncWorker>(
             3, TimeUnit.HOURS
@@ -102,17 +148,33 @@ class WeatherViewModel(
         )
     }
 
-    data class WeatherState(
-        val weatherData: WeatherResponse? = null,
-        val forecastData: ForecastResponse? = null,
-        val isLoading: Boolean = false,
-        val errorMessage: String? = null,
-        val selectedItems: SelectedItems = SelectedItems()
-    ) {
-        data class SelectedItems(
-            val hourly: ForecastItem? = null,
-            val daily: List<ForecastItem>? = null,
-            val dailyDetail: List<ForecastItem>? = null
+    private fun convertTemperature(temp: Double, settings: SettingsState): Double {
+        return UnitConverter.convertTemperature(
+            temp,
+            fromUnit = "celsius",
+            toUnit = settings.tempUnit
         )
     }
+
+    private fun convertWindSpeed(speed: Double, settings: SettingsState): Double {
+        return UnitConverter.convertWindSpeed(
+            speed,
+            fromUnit = "m/s",
+            toUnit = settings.windUnit
+        )
+    }
+}
+
+data class WeatherState(
+    val weatherData: WeatherResponse? = null,
+    val forecastData: ForecastResponse? = null,
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null,
+    val selectedItems: SelectedItems = SelectedItems()
+) {
+    data class SelectedItems(
+        val hourly: ForecastItem? = null,
+        val daily: List<ForecastItem>? = null,
+        val dailyDetail: List<ForecastItem>? = null
+    )
 }

@@ -7,7 +7,7 @@ import androidx.compose.runtime.LaunchedEffect
 fun ForecastScreen(
     lat: Double,
     lon: Double,
-    viewModel: WeatherViewModel // No navController here
+    viewModel: WeatherViewModel
 ) {
     LaunchedEffect(lat, lon) {
         viewModel.loadWeather(lat.toString(), lon.toString())

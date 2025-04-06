@@ -38,9 +38,10 @@ import com.iti.java.egyweather.Model.BOJO.FavoriteLocation
 
 @Composable
 fun FavoritesScreen(navController: NavController) {
-    val activity = LocalActivity.current as MainActivity
+    val context = LocalContext.current
+    val application = context.applicationContext as MainApplication
     val viewModel: FavoritesViewModel = viewModel(
-        factory = FavoritesViewModelFactory(activity.repository)
+        factory = FavoritesViewModelFactory(application.repository)
     )
 
     val favorites by viewModel.favorites.collectAsState()
@@ -61,7 +62,7 @@ fun FavoritesScreen(navController: NavController) {
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { val intent = Intent(activity, AddLocationActivity::class.java)
+                onClick = { val intent = Intent(context, AddLocationActivity::class.java)
                     startForResult.launch(intent) },
                 modifier = Modifier.padding(16.dp)
             ) {

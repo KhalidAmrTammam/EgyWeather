@@ -7,6 +7,7 @@ import androidx.room.Query
 import com.iti.java.egyweather.Model.BOJO.FavoriteLocation
 import com.iti.java.egyweather.Model.BOJO.ForecastResponse
 import com.iti.java.egyweather.Model.BOJO.WeatherResponse
+import com.iti.java.egyweather.Model.BOJO.WeatherAlert
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -49,4 +50,19 @@ interface WeatherDao {
 
     @Query("SELECT * FROM favorites ORDER BY created_At DESC")
     fun getFavorites(): Flow<List<FavoriteLocation>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAlert(alert: WeatherAlert): Long
+
+    @Query("UPDATE weather_alerts SET isActive = :active WHERE id = :alertId")
+    suspend fun updateAlertStatus(alertId: Long, active: Boolean)
+
+    @Query("DELETE FROM weather_alerts WHERE id = :alertId")
+    suspend fun deleteAlert(alertId: Long)
+
+    @Query("SELECT * FROM weather_alerts ORDER BY alertTime DESC")
+    fun getAlerts(): Flow<List<WeatherAlert>>
+
+    @Query("SELECT * FROM weather_alerts WHERE id = :alertId")
+    suspend fun getAlertById(alertId: Long): WeatherAlert?
 }

@@ -102,5 +102,10 @@ dependencies {
     implementation(libs.androidx.ui.util)
     implementation (libs.material)
     implementation (libs.places)
+    implementation (libs.kotlinx.datetime)
+
+    implementation (libs.play.services.location)
+
+
 
 }
