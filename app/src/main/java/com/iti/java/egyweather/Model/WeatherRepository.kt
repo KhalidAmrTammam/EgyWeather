@@ -3,7 +3,9 @@ package com.iti.java.egyweather.Model
 import android.content.Context
 import android.util.Log
 import androidx.room.Transaction
+import com.iti.java.egyweather.Model.BOJO.FavoriteLocation
 import com.iti.java.egyweather.Model.BOJO.ForecastResponse
+import com.iti.java.egyweather.Model.BOJO.WeatherAlert
 import com.iti.java.egyweather.Model.BOJO.WeatherResponse
 import com.iti.java.egyweather.Model.LocalDataSource.WeatherDao
 import com.iti.java.egyweather.Model.RemoteDataSource.RemoteDataSource
@@ -115,13 +117,39 @@ class WeatherRepository(
             Log.e(TAG, "Sync failed", e)
         }
     }
-    fun getAlerts(): Flow<List<String>> = flow {
-        emit(emptyList())
+
+    suspend fun addFavorite(favorite: FavoriteLocation) {
+        weatherDao.insertFavorite(favorite)
     }
 
-    fun getFavorites(): Flow<List<String>> = flow {
-        emit(emptyList())
+    suspend fun removeFavorite(id: Long) {
+        weatherDao.deleteFavorite(id)
     }
+
+    fun getFavorites(): Flow<List<FavoriteLocation>> {
+        return weatherDao.getFavorites()
+    }
+    suspend fun insertAlert(alert: WeatherAlert): Long {
+        return weatherDao.insertAlert(alert)
+    }
+
+    suspend fun updateAlertStatus(alertId: Long, active: Boolean) {
+        weatherDao.updateAlertStatus(alertId, active)
+    }
+
+    suspend fun deleteAlert(alertId: Long) {
+        weatherDao.deleteAlert(alertId)
+    }
+
+    fun getAlerts(): Flow<List<WeatherAlert>> {
+        return weatherDao.getAlerts()
+    }
+    suspend fun getAlertById(alertId: Long): WeatherAlert? {
+        return weatherDao.getAlertById(alertId)
+    }
+
+
+
 
 }
 

@@ -15,8 +15,15 @@ class RemoteDataSource(private val api: WeatherApi) {
         return executeWithRetry { api.getWeather(lat, lon, apiKey) }
     }
 
-    suspend fun fetchFutureWeather(lat: String, lon: String, apiKey: String): Result<ForecastResponse> {
-        return executeWithRetry { api.getForecast(lat, lon, apiKey) }
+    suspend fun fetchFutureWeather(
+        lat: String,
+        lon: String,
+        apiKey: String,
+        units: String = "metric"
+    ): Result<ForecastResponse> {
+        return executeWithRetry {
+            api.getForecast(lat, lon, apiKey, units)
+        }
     }
 
     private suspend fun <T> executeWithRetry(

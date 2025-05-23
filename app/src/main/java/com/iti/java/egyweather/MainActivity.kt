@@ -1,9 +1,18 @@
 package com.iti.java.egyweather
 
+import android.app.Application
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -47,7 +56,6 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
@@ -91,12 +99,58 @@ import androidx.work.WorkManager
 import kotlinx.datetime.Clock
 import java.time.format.TextStyle
 import java.util.Locale
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.clip
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.android.libraries.places.api.Places
+import com.google.android.libraries.places.api.net.PlacesClient
+import kotlinx.coroutines.launch
+import android.Manifest
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import android.content.Intent
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import com.google.android.gms.maps.model.LatLng
+
 
 class MainActivity : ComponentActivity() {
+    private val placesClient by lazy { (application as MainApplication).placesClient }
+    private var manualLocation by mutableStateOf<LatLng?>(null)
+    private val locationService by lazy { LocationService(this) }
+    private val settingsViewModel: SettingsViewModel by viewModels {
+        SettingsViewModelFactory(SettingsRepository(this))
+    }
+
+    private val locationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        if (permissions.all { it.value }) {
+            fetchLocation()
+        }
+    }
+
+    private val addLocationLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            result.data?.let { data ->
+                val lat = data.getDoubleExtra("lat", 0.0)
+                val lon = data.getDoubleExtra("lon", 0.0)
+                viewModel.loadWeather(lat.toString(), lon.toString())
+            }
+        }
+    }
+
     private val viewModel: WeatherViewModel by viewModels {
         WeatherViewModelFactory(
             WeatherRepository(
@@ -104,43 +158,168 @@ class MainActivity : ComponentActivity() {
                 WeatherDatabase.getInstance(this).weatherDao(),
                 this
             ),
-            WorkManager.getInstance(this)
+            WorkManager.getInstance(this),
+            settingsViewModel
         )
     }
-    internal val repository by lazy {
-        WeatherRepository(
-            RemoteDataSource(RetrofitHelper.api),
-            WeatherDatabase.getInstance(this).weatherDao(),
-            this
-        )
-    }
-
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            EgyWeatherTheme {
-                val navController = rememberNavController()
-                viewModel.loadWeather("30.0444", "31.2357", NetworkUtils.isInternetAvailable(this))
-                viewModel.scheduleWeatherSync("30.0444", "31.2357")
 
-                Scaffold(
-                    topBar = { WeatherAppBar() },
-                    bottomBar = {
-                        BottomNavigationBar(navController = navController)
+        val prefs = getSharedPreferences("settings", MODE_PRIVATE)
+        val lang = prefs.getString("language", "system") ?: "system"
+        if (lang != "system") {
+            Locale.setDefault(Locale(lang))
+        }
+
+        createNotificationChannel()
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                settingsViewModel.uiState.collect { state ->
+                    if (state.language != currentLanguage) {
+                        //recreate()
                     }
+                }
+            }
+        }
 
-                ) { padding ->
-                    NavigationHost(
-                        navController = navController,
-                        weatherViewModel = viewModel,
-                        padding = padding
+        setContent {
+            MainContent(this)
+        }
+    }
+
+
+
+    @Composable
+    private fun MainContent(context: Context) {
+        val notificationPermissionLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { isGranted ->
+            if (!isGranted) Log.d("TAG", "Notification permission denied")
+        }
+
+        LaunchedEffect(Unit) {
+            settingsViewModel.uiState.collect { settings ->
+                when {
+                    settings.useSystemLanguage -> {
+                        val systemLang = Locale.getDefault().language
+                        setAppLocale(context, systemLang)
+                    }
+                    else -> setAppLocale(context, settings.language)
+                }
+            }
+        }
+
+        EgyWeatherTheme {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                LaunchedEffect(Unit) {
+                    notificationPermissionLauncher.launch(
+                        Manifest.permission.POST_NOTIFICATIONS
                     )
+                }
+            }
+
+            val navController = rememberNavController()
+            val settingsState by settingsViewModel.uiState.collectAsState()
+
+            LaunchedEffect(settingsState.locationSource) {
+                if (settingsState.locationSource == "gps") {
+                    checkLocationPermissions()
+                }
+            }
+
+            Scaffold(
+                topBar = { WeatherAppBar() },
+                bottomBar = { BottomNavigationBar(navController = navController) }
+            ) { padding ->
+                NavigationHost(
+                    navController = navController,
+                    weatherViewModel = viewModel,
+                    padding = padding,
+                    placesClient = placesClient,
+                    onLocationSourceChanged = { useGPS ->
+                        if (useGPS) checkLocationPermissions()
+                        else launchMapPicker()
+                    }
+                )
+            }
+        }
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                "weather_alerts_channel",
+                "Weather Alerts",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Weather alert notifications"
+                enableLights(true)
+                lightColor = android.graphics.Color.RED
+                enableVibration(true)
+            }
+            getSystemService(NotificationManager::class.java)
+                ?.createNotificationChannel(channel)
+        }
+    }
+
+    private fun setAppLocale(context: Context, languageCode: String) {
+        val locale = Locale(languageCode)
+        Locale.setDefault(locale)
+        val config = context.resources.configuration
+        config.setLocale(locale)
+        config.setLayoutDirection(locale)
+        context.createConfigurationContext(config)
+        context.resources.updateConfiguration(config, context.resources.displayMetrics)
+    }
+
+    private fun checkLocationPermissions() {
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            locationPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        } else {
+            fetchLocation()
+        }
+    }
+
+    private fun checkLocationSource() {
+        when(settingsViewModel.uiState.value.locationSource) {
+            "gps" -> checkLocationPermissions()
+            "map" -> manualLocation?.let {
+                viewModel.loadWeather(it.latitude.toString(), it.longitude.toString())
+            } ?: launchMapPicker()
+        }
+    }
+
+    private fun fetchLocation() {
+        lifecycleScope.launch {
+            if(settingsViewModel.uiState.value.locationSource == "gps") {  // Changed here
+                locationService.getCurrentLocation()?.let {
+                    viewModel.loadWeather(it.latitude.toString(), it.longitude.toString())
                 }
             }
         }
     }
+
+    fun launchMapPicker() {
+        val intent = Intent(this, AddLocationActivity::class.java)
+        addLocationLauncher.launch(intent)
+    }
+
+    private val currentLanguage: String
+        get() = resources.configuration.locales[0]?.language ?: "en"
 }
+
+// Rest of your existing composables (WeatherScreen, NavigationHost, etc.) remain the same
 
 @Composable
 fun WeatherScreen(viewModel: WeatherViewModel) {
@@ -197,7 +376,8 @@ fun MainWeatherScreen(viewModel: WeatherViewModel) {
                     start = 24.dp,
                     end = 24.dp,
                     top = 16.dp,
-                    bottom = 24.dp),
+                    bottom = 24.dp
+                ),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             item { CurrentWeatherSection(state.weatherData) }
@@ -700,9 +880,12 @@ private fun WeatherDetailRow(icon: ImageVector, title: String, value: String) {
 fun NavigationHost(
     navController: NavHostController,
     weatherViewModel: WeatherViewModel,
-    padding: PaddingValues
+    padding: PaddingValues,
+    placesClient: PlacesClient,
+    onLocationSourceChanged: (Boolean) -> Unit
 ) {
-    val activity = LocalActivity.current as MainActivity
+    val context = LocalContext.current
+    val application = context.applicationContext as MainApplication
     NavHost(
         navController = navController,
         startDestination = Screen.Home.route,
@@ -712,13 +895,54 @@ fun NavigationHost(
             WeatherScreen(viewModel = weatherViewModel)
         }
         composable(Screen.Favorites.route) {
-            FavoritesScreen(viewModel = FavoritesViewModel(activity.repository))
-        }
-        composable(Screen.Alerts.route) {
-            AlertsScreen(viewModel = AlertsViewModel(activity.repository))
+            FavoritesScreen(navController = navController)
         }
         composable(Screen.Settings.route) {
-            SettingsScreen(viewModel = SettingsViewModel(SettingsRepository()))
+            val settingsViewModel: SettingsViewModel = viewModel(
+                factory = SettingsViewModelFactory(
+                    SettingsRepository(application)
+                )
+            )
+
+            SettingsScreen(
+                viewModel = settingsViewModel,
+                onLocationSourceChanged = onLocationSourceChanged
+            )
+        }
+        composable(Screen.Forecast.route) { backStackEntry ->
+            val lat = backStackEntry.arguments?.getString("lat")?.toDoubleOrNull() ?: 0.0
+            val lon = backStackEntry.arguments?.getString("lon")?.toDoubleOrNull() ?: 0.0
+            ForecastScreen(
+                lat = lat,
+                lon = lon,
+                viewModel = weatherViewModel
+            )
+        }
+        composable(Screen.Alerts.route) {
+            val alertsViewModel: AlertsViewModel = viewModel(
+                factory = AlertsViewModelFactory(
+                    repository = application.repository,
+                    application = application
+                )
+            )
+            AlertsScreen(
+                navController = navController,
+                viewModel = alertsViewModel
+            )
+        }
+
+        composable(Screen.AlertSettings.route) {
+            val alertsViewModel: AlertsViewModel = viewModel(
+                factory = AlertsViewModelFactory(
+                    repository = application.repository,
+                    application = application
+                )
+            )
+            AlertSettingScreen(
+                navController = navController,
+                viewModel = alertsViewModel,
+                placesClient = placesClient
+            )
         }
     }
 }
@@ -771,4 +995,22 @@ private fun WeatherAppBar() {
             titleContentColor = MaterialTheme.colorScheme.onPrimary
         )
     )
+}
+@Composable
+private fun TemperatureText(temp: Double, unit: String) {
+    val unitString = when(unit) {
+        "celsius" -> stringResource(R.string.celsius)
+        "fahrenheit" -> stringResource(R.string.fahrenheit)
+        else -> stringResource(R.string.kelvin)
+    }
+    Text("${temp.toInt()}$unitString")
+}
+
+@Composable
+private fun WindSpeedText(speed: Double, unit: String) {
+    val unitString = when(unit) {
+        "m/s" -> stringResource(R.string.ms)
+        else -> stringResource(R.string.mph)
+    }
+    Text("${"%.1f".format(speed)} $unitString")
 }

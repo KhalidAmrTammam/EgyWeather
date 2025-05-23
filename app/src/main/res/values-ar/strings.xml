@@ -1,0 +1,20 @@
+<resources>
+    <string name="app_name">طقس مصر</string>
+    <string name="settings_title">الإعدادات</string>
+    <string name="units_settings">إعدادات الوحدات</string>
+    <string name="temperature_unit">وحدة درجة الحرارة</string>
+    <string name="wind_speed_unit">وحدة سرعة الرياح</string>
+    <string name="location_settings">إعدادات الموقع</string>
+    <string name="language_settings">إعدادات اللغة</string>
+    <string name="gps">نظام تحديد المواقع</string>
+    <string name="map">الخريطة</string>
+    <string name="english">الإنجليزية</string>
+    <string name="arabic">العربية</string>
+    <string name="system_default">النظام الافتراضي</string>
+    <string name="location_source">مصدر الموقع</string>
+    <string name="celsius">مئوية</string>
+    <string name="fahrenheit">فهرنهايت</string>
+    <string name="kelvin">كلفن</string>
+    <string name="ms">م/ث</string>
+    <string name="mph">ميل/س</string>
+</resources>

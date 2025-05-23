@@ -1,3 +1,24 @@
 <resources>
     <string name="app_name">EgyWeather</string>
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="units_settings">Units Settings</string>
+    <string name="temperature_unit">Temperature Unit</string>
+    <string name="wind_speed_unit">Wind Speed Unit</string>
+    <string name="location_settings">Location Settings</string>
+    <string name="language_settings">Language Settings</string>
+    <string name="gps">GPS</string>
+    <string name="map">Map</string>
+    <string name="english">English</string>
+    <string name="arabic">Arabic</string>
+    <string name="system_default">System Default</string>
+    <string name="location_source">Location Source</string>
+
+    <!-- Units -->
+    <string name="celsius">°C</string>
+    <string name="fahrenheit">°F</string>
+    <string name="kelvin">K</string>
+    <string name="ms">m/s</string>
+    <string name="mph">mph</string>
+
 </resources>
